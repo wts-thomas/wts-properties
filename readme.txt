@@ -4,7 +4,7 @@ Contributors: Thomas Rainer
 Requires at least: 4.7
 Tested up to: 6.1
 Stable tag: 1.0
-Version: 1.0.0
+Version: 1.0.1
 Requires PHP: 8.0
 JQuery: 3.6.3
 License: GNU General Public License v3 or later
@@ -19,6 +19,9 @@ This theme resets the WordPress environment and prepares it for smooth operation
 
 Screenshot's images & icons are licensed under: Creative Commons (CC0), https://creativecommons.org/publicdomain/zero/1.0/legalcode
 
+= 1.0.1 - 12-03-2024 =
+* Refactoring of some functions
+
 = 1.0.0 - 12-03-2024 =
 * Fixes Critical Error with the DOM functions
 * Refactored hide menu functions for non WTS users
@@ -27,7 +30,6 @@ Screenshot's images & icons are licensed under: Creative Commons (CC0), https://
 * POH Winner class, styles, and artwork added to single property listings and to archive listing page
 * Added styles and edited 'content-archive' to show Community logos on property listings
 * Styles to have half map display two columns of property listings intead of three (add #halfMap-2col to widget)
-* Styles for a 'white' version of Breadcrumbs (add .breadcrumbs_white to the shortcode widget)
 * Refactored functions for Estatik that added spaces after commas and removed spaces after commas
 * Improved DOM functions within prev mentioned functions to eliminate error related to conflicts
 * Sold added as a potential label for properties
@@ -35,7 +37,6 @@ Screenshot's images & icons are licensed under: Creative Commons (CC0), https://
 * Additional styles for POH Entry Numbers
 * POH ACF Field for Entry numbers to Estatik template override (property/content-archive)
 * Entry Number styling
-* Blocks non-alphanumeric character in name fields (GravityForms)
 * Updated and fixed functions for site optimizations: Dashicons, JS and CSS defering/render blocking resources
 * CRITICAL ERROR FIX, removed functions: Width and Hight, Deregistration of Dashicons, and Canceling Revisions
 * Removes the function "Explicit Fix to Width and Height" due to an occational Critical error
@@ -74,6 +75,5 @@ Screenshot's images & icons are licensed under: Creative Commons (CC0), https://
 * Revised margin start for paragraph widgets
 * Hides AI buttons in Elementor Editor panel
 * Renames Elementor Overrides stylesheet to reflect that not just color edits are being made
-* Updated Screenshot for Theme
 * Initial property listing template overrides for RETS plugin (Estatik4)
 * Initial Release

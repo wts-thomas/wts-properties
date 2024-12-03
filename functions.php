@@ -12,14 +12,42 @@ $myUpdateChecker = Puc_v4_Factory::buildUpdateChecker(
 //Set the branch that contains the stable release.
 $myUpdateChecker->setBranch('main');
 
+/*  Basic Wordpress Edits
+_____________________________________________________________________*/
+
 // Custom Admin Styles
 function my_admin_head() {
-   echo '<link href="'.get_stylesheet_directory_uri().'/wp-admin.css" rel="stylesheet" type="text/css">';
+   // Check if we are in the WordPress admin and the user is logged in
+   if ( is_admin() && is_user_logged_in() ) {
+       echo '<link href="' . get_stylesheet_directory_uri() . '/wp-admin.css" rel="stylesheet" type="text/css">';
+   }
 }
 add_action('admin_head', 'my_admin_head');
 
+// Custom Admin Scripts
+function wpdocs_enqueue_custom_admin_script() {
+   // Check if we are in the WordPress admin and the user is logged in
+   if ( is_admin() && is_user_logged_in() ) {
+       wp_enqueue_script('adminScripts', get_template_directory_uri() . '/js/adminScripts.js', array('jquery'), '1.0', true);
+   }
+}
+// Set a high priority to ensure this runs late
+add_action('admin_enqueue_scripts', 'wpdocs_enqueue_custom_admin_script', 100);
+
 // Adds the Excerpt meta box for pages.
 add_post_type_support( 'page', 'excerpt' );
+
+// Disables WordPress Autosave
+add_action( 'admin_init', 'disable_autosave' );
+   function disable_autosave() {
+   wp_deregister_script( 'autosave' );
+}
+
+// Adds Title support for pages
+function title_theme_slug_setup() {
+   add_theme_support( 'title-tag' );
+}
+add_action( 'after_setup_theme', 'title_theme_slug_setup' );
 
 
 /*  Performance & Security Edits
@@ -38,7 +66,7 @@ remove_action('wp_head', 'rsd_link');
 add_filter( 'auto_update_plugin', '__return_false' );
 add_filter( 'auto_update_theme', '__return_false' );
 
-// STOPS DEFAULT LAZY LOAD
+// STOPS WORDPRESS' DEFAULT LAZY LOAD
 add_filter( 'wp_lazy_loading_enabled', '__return_false' );
 
 // REMOVE AVATAR DONATION MESSAGE
@@ -98,7 +126,7 @@ function defer_specific_css_files( $html, $handle ) {
    }
    add_filter( 'style_loader_tag', 'defer_specific_css_files', 10, 2 );
 
-// DEFER JS
+// DEFERES JS
 function defer_specific_js_files( $tag, $handle ) {
 	$defer_handles = array( 'es-select2', 'es-datetime-picker' );
 
@@ -111,10 +139,102 @@ function defer_specific_js_files( $tag, $handle ) {
 add_filter( 'script_loader_tag', 'defer_specific_js_files', 10, 2 );
 
 
+/*  Removal of Plugin Version Update Notices
+_____________________________________________________________________*/
+
+// Function to add settings fields for hiding plugin updates
+function wpb_add_update_plugins_option() {
+   // Register a new setting for hiding Elementor plugin updates
+   register_setting('general', 'hide_plugin_updates', 'absint');
+   
+   // Register another setting for hiding updates of a different set of plugins
+   register_setting('general', 'hide_additional_plugin_updates', 'absint');
+
+   // Add a section for hiding Elementor plugin updates
+   add_settings_field(
+       'hide_plugin_updates', // ID
+       'Hides Elementor Plugin Updates', // Title
+       'wpb_hide_plugin_updates_callback', // Callback function
+       'general' // Page to display on
+   );
+   
+   // Add another section for hiding additional plugins
+   add_settings_field(
+       'hide_additional_plugin_updates', // ID
+       'Hides Dynamic Plugin Updates', // Title
+       'wpb_hide_additional_plugin_updates_callback', // Callback function
+       'general' // Page to display on
+   );
+}
+
+// Callback function for the first checkbox (Elementor plugins)
+function wpb_hide_plugin_updates_callback() {
+   $value = get_option('hide_plugin_updates', 0); // Default to 0 (unchecked)
+   echo '<input type="checkbox" id="hide_plugin_updates" name="hide_plugin_updates" ' . checked(1, $value, false) . ' value="1"> Hides Elementor and Elementor Pro updates that require testing before being updated';
+}
+
+// Callback function for the second checkbox (Dynamic and Ultimate Elementor plugins)
+function wpb_hide_additional_plugin_updates_callback() {
+   $value = get_option('hide_additional_plugin_updates', 0); // Default to 0 (unchecked)
+   echo '<input type="checkbox" id="hide_additional_plugin_updates" name="hide_additional_plugin_updates" ' . checked(1, $value, false) . ' value="1"> Hides various dynamic updates that require testing before being updated';
+}
+
+add_action('admin_init', 'wpb_add_update_plugins_option');
+
+// Function to filter plugin updates based on the selected options
+function filter_plugin_updates( $value ) {
+   // Check if the Elementor plugin updates should be hidden
+   if (get_option('hide_plugin_updates', 0)) {
+       if ( isset( $value ) && is_object( $value ) ) {
+           unset( $value->response[ 'elementor/elementor.php' ] );
+           unset( $value->response[ 'elementor-pro/elementor-pro.php' ] );
+       }
+   }
+
+   // Check if the additional plugin updates should be hidden
+   if (get_option('hide_additional_plugin_updates', 0)) {
+       if ( isset( $value ) && is_object( $value ) ) {
+           unset( $value->response[ 'dynamic-content-for-elementor/dynamic-content-for-elementor.php' ] );
+           unset( $value->response[ 'ultimate-elementor/ultimate-elementor.php' ] );
+       }
+   }
+
+   return $value;
+}
+add_filter( 'site_transient_update_plugins', 'filter_plugin_updates' );
+
+
+/* Removes Specific Admin Notices
+_____________________________________________________________________*/
+
+function hide_specific_admin_notices() {
+   echo '
+   <style>
+       .code-snippets-pro-notice,
+       .go-pro-button,
+       .code-snippets-upgrade-button,
+       .cptui-new .wdspromos,
+       .yoast-seo-premium-upgrade,
+       .wp-mail-smtp-sidebar-upgrade-pro,
+       .wp-mail-smtp-pro,
+       #snippet-type-tabs .nav-tab-inactive,
+       .e-admin-top-bar__secondary-area-buttons,
+       .elementor-control-notice-type-warning,
+       #yoast-seo-settings .xl\:yst-fixed.xl\:yst-right-8,
+       a[title="Upgrade to Code Snippets Pro"],
+       .pro a[aria-label="Upgrade to WP Mail SMTP Pro"] {
+           display: none !important;
+       }
+   </style>
+   ';
+}
+add_action('admin_head', 'hide_specific_admin_notices');
+
+
 /*  Elementor Edits
 ________________________________________________________________________*/
 
-// REMOVE GOOGLE FRONTS - ELEMENTOR
+// REMOVE GOOGLE FONTS - ELEMENTOR
 add_filter( 'elementor/frontend/print_google_fonts', '__return_false' );
 
 // REMOVE ELEMENTOR GLOBAL STYLES
@@ -156,41 +276,333 @@ add_filter( 'elementor_pro/custom_fonts/font_display', function( $current_value,
 add_theme_support( 'post-thumbnails' );
 
 // OVERRIDE EDITOR STYLES - SINCE 3.12.0
-function override_elementor_styles_css(){ 
-   wp_register_style('override-editor-styles', get_template_directory_uri().'/styles/editor-overrides.css');
-   wp_enqueue_style('override-editor-styles');
-} 
+function override_elementor_styles_css() {
+   // Check if we are in the WordPress admin and the user is logged in
+   if ( is_admin() && is_user_logged_in() ) {
+       wp_register_style('override-editor-styles', get_template_directory_uri().'/styles/editor-overrides.css');
+       wp_enqueue_style('override-editor-styles');
+   }
+}
 add_action( 'elementor/editor/after_enqueue_scripts', 'override_elementor_styles_css', 9999999 );
+
+
+/*  REMOVES ELEMENTOR PROMOTIONAL ITEMS
+________________________________________________________________________*/
+
+function custom_admin_css() {
+   echo '<style>
+       .notice.e-notice.e-notice--cta.e-notice--dismissible.e-notice--extended[data-notice_id="plugin_image_optimization"] {
+           display: none !important;
+       }
+   </style>';
+}
+add_action('admin_head', 'custom_admin_css', 9999999);
+
+
+/*  HIDES ELEMENTOR PROMOTIONAL NOTICES
+________________________________________________________________________*/
+
+function hide_elementor_notices() {
+   echo '<style>
+       .e-notice {
+           display: none !important;
+       }
+   </style>';
+}
+add_action('admin_head', 'hide_elementor_notices');
+
+
+/*  ELEMENTOR, CUSTOM SHAPE DIVIDERS
+________________________________________________________________________*/
+
+function custom_elementor_shape_dividers( $additional_shapes ) {
+
+	$additional_shapes['shape-divider-1'] = [
+		'title'        => esc_html__( 'Slashes', 'textdomain' ),
+		'url'          => get_stylesheet_directory_uri() . '/assets/shapes/section-divider_slashes.svg',
+		'path'         => get_stylesheet_directory() . '/assets/shapes/section-divider_slashes.svg',
+		'height_only'  => false,
+	];
+
+	return $additional_shapes;
+
+}
+add_filter( 'elementor/shapes/additional_shapes', 'custom_elementor_shape_dividers' );
 
 
 /*  ADMIN DASHBOARD LINKS
 ________________________________________________________________________*/
 
 // Remove Admin features from Dashboard excluding WTS users
-function wts_remove_menus(){ 
-   $current_user = wp_get_current_user(); 
-   // Check if the user's email does NOT have the domain @wtsks.com
-   if( strpos( $current_user->user_email, '@wtsks.com' ) === false ){ 
-      //remove_menu_page( 'index.php' );                             //Dashboard 	         
-      //remove_menu_page( 'edit.php' );                              //Posts		         
-      //remove_menu_page( 'upload.php' );                            //Media 		         
-      //remove_menu_page( 'edit.php?post_type=page' );               //Pages 		         
-      //remove_menu_page( 'edit-comments.php' );                     //Comments	         
-      //remove_menu_page( 'users.php' );                             //Users		         
-      remove_menu_page( 'themes.php' );                              //Appearance            
-      remove_menu_page( 'plugins.php' );                             //Plugins		     
-      remove_menu_page( 'tools.php' );                               //Tools		         
-      remove_menu_page( 'options-general.php' );                     //Settings   	         
-      remove_menu_page( 'edit.php?post_type=acf-field-group' );      //ACF 	         
-      remove_menu_page( 'cptui_main_menu' );                         //CPT UI                
-      remove_menu_page( 'snippets' );                                //Snippets              
-      remove_menu_page( 'elementor' );                               //Elementor             
-      remove_menu_page( 'edit.php?post_type=elementor_library' );    //Elementor Templates   
-      remove_menu_page( 'edit.php?post_type=search-filter-widget' ); //Search & Filter       
-      remove_menu_page( 'dce-features' );                            //Dynamic.ooo           
-   } 
-} 
-add_action( 'admin_menu', 'wts_remove_menus', 9999 );
+
+// Add the checkbox setting to the General settings page
+function wts_add_admin_features_checkbox() {
+   add_settings_field(
+       'wts_disable_admin_features_removal',
+       'Enable Admin Features',
+       'wts_render_admin_features_checkbox',
+       'general'
+   );
+   
+   register_setting('general', 'wts_disable_admin_features_removal');
+}
+
+function wts_render_admin_features_checkbox() {
+   // Retrieve the current value of the setting
+   $disable_removal = get_option('wts_disable_admin_features_removal');
+   ?>
+   <input type="checkbox" name="wts_disable_admin_features_removal" value="1" <?php checked(1, $disable_removal); ?>> Shows Admin Features for non WTS Users
+   <?php
+}
+
+// Conditionally remove menu items based on the checkbox setting
+function wts_conditional_remove_menus() {
+   $disable_removal = get_option('wts_disable_admin_features_removal');
+
+   // Only execute the menu removal if the checkbox is not checked
+   if (!$disable_removal) {
+       wts_remove_menus();
+   }
+}
+
+// Original function to remove admin features
+function wts_remove_menus() { 
+  $current_user = wp_get_current_user(); 
+  if (strpos($current_user->user_email, '@wtsks.com') === false) { 
+     // List of menu pages to remove
+     remove_submenu_page('index.php', 'update-core.php');
+     remove_menu_page('themes.php');                             
+     remove_menu_page('plugins.php');                           
+     remove_menu_page('tools.php');                             
+     remove_menu_page('options-general.php');                   
+     remove_menu_page('edit.php?post_type=acf-field-group');
+     remove_menu_page('cptui_main_menu');                       
+     remove_menu_page('snippets');                              
+     remove_menu_page('elementor');                             
+     remove_menu_page('edit.php?post_type=elementor_library');
+     remove_submenu_page('edit.php?post_type=elementor_library', 'edit.php?post_type=elementor_library&tabs_group=popup&elementor_library_type=popup');
+     remove_menu_page('dce-features');
+     remove_menu_page('search-filter');
+     remove_menu_page('wp-mail-smtp');
+     remove_menu_page('itsec');
+     remove_menu_page('wpseo_dashboard');
+  }
+}
+
+// Hook the functions to appropriate WordPress actions
+add_action('admin_init', 'wts_add_admin_features_checkbox');
+add_action('admin_init', 'wts_conditional_remove_menus', 9999);
+
+
+/*  HIDE FOR NON WTS USERS WITH CHECKBOX SHOW
+_____________________________________________________________________*/
+
+// Add the checkbox setting to the General settings page for Gravity Forms
+function wts_add_gravity_forms_visibility_checkbox() {
+   add_settings_field(
+       'wts_show_gravity_forms', // Option ID
+       'Gravity Forms Admin Menu', // Label for the checkbox
+       'wts_render_gravity_forms_visibility_checkbox', // Callback to render the checkbox
+       'general' // Settings page (general)
+   );
+   
+   register_setting('general', 'wts_show_gravity_forms'); // Register the setting
+}
+
+function wts_render_gravity_forms_visibility_checkbox() {
+   // Retrieve the current value of the setting
+   $show_gravity_forms = get_option('wts_show_gravity_forms');
+   ?>
+   <input type="checkbox" name="wts_show_gravity_forms" value="1" <?php checked(1, $show_gravity_forms); ?>> Show Gravity Forms Admin Menu for non WTS Users
+   <?php
+}
+
+// Conditionally hide or show Gravity Forms menu based on the checkbox setting
+function wts_conditional_hide_gravity_forms_menu() {
+   $show_gravity_forms = get_option('wts_show_gravity_forms');
+   $current_user = wp_get_current_user();
+
+   // If the user is not from WTS and the checkbox is unchecked, hide Gravity Forms
+   if (strpos($current_user->user_email, '@wtsks.com') === false && !$show_gravity_forms) {
+       remove_menu_page('gf_edit_forms'); // Gravity Forms admin menu slug
+   }
+}
+
+// Hook the new functions to appropriate WordPress actions
+add_action('admin_init', 'wts_add_gravity_forms_visibility_checkbox'); // To add the checkbox
+add_action('admin_menu', 'wts_conditional_hide_gravity_forms_menu', 9999); // To hide/show Gravity Forms menu
+
+
+/*  HIDE COMMENTS MENU WITH CHECKBOX SHOW/HIDE
+_____________________________________________________________________*/
+
+// Add the checkbox setting to the General settings page for Comments
+function wts_add_comments_visibility_checkbox() {
+   add_settings_field(
+       'wts_hide_comments', // Option ID
+       'Comments Admin Menu', // Label for the checkbox
+       'wts_render_comments_visibility_checkbox', // Callback to render the checkbox
+       'general' // Settings page (general)
+   );
+   
+   register_setting('general', 'wts_hide_comments'); // Register the setting
+}
+
+function wts_render_comments_visibility_checkbox() {
+   // Retrieve the current value of the setting
+   $hide_comments = get_option('wts_hide_comments');
+   ?>
+   <input type="checkbox" name="wts_hide_comments" value="1" <?php checked(1, $hide_comments); ?>> Hide Comments Admin Menu for all users
+   <?php
+}
+
+// Conditionally hide or show Comments menu based on the checkbox setting
+function wts_conditional_hide_comments_menu() {
+   $hide_comments = get_option('wts_hide_comments');
+
+   // If the checkbox is checked, hide Comments for all users
+   if ($hide_comments) {
+       remove_menu_page('edit-comments.php'); // Comments admin menu slug
+   }
+}
+
+// Hook the new functions to appropriate WordPress actions
+add_action('admin_init', 'wts_add_comments_visibility_checkbox'); // To add the checkbox
+add_action('admin_menu', 'wts_conditional_hide_comments_menu', 9999); // To hide/show Comments menu
+
+
+/*  HIDE, EDIT WITH ELEMENTOR BUTTON(S)
+________________________________________________________________________*/
+
+function add_elementor_checkbox() {
+   // Add a new setting to the "General" WordPress settings page
+   add_settings_field(
+       'show_edit_with_elementor_button',
+       'Hide "Edit with Elementor"',
+       'render_elementor_checkbox',
+       'general'
+   );
+   
+   // Register the new setting
+   register_setting('general', 'show_edit_with_elementor_button');
+}
+
+function render_elementor_checkbox() {
+   // Retrieve the current value of the setting
+   $show_button = get_option('show_edit_with_elementor_button');
+   ?>
+   <input type="checkbox" name="show_edit_with_elementor_button" value="1" <?php checked(1, $show_button); ?>> Hides the edit with Elementor Buttons and links
+   <?php
+}
+
+function hide_elementor_button() {
+   // Check if the "Show 'Edit with Elementor' button" setting is checked
+   $show_button = get_option('show_edit_with_elementor_button');
+   if ($show_button) {
+       // Hide the "Edit with Elementor" button on the post/page edit screen
+       ?>
+       <style>
+            #elementor-switch-mode-button, #elementor-editor, #wp-admin-bar-elementor_edit_page {
+                display:none;
+            } 
+      </style>
+      <?php
+   }
+}
+
+add_action('admin_init', 'add_elementor_checkbox');
+add_action('admin_head-post.php', 'hide_elementor_button');
+add_action('admin_head-post-new.php', 'hide_elementor_button');
+
+
+/*  HIDE ELEMENTOR NOTICES AND LINKS IN PAGE VIEWS
+________________________________________________________________________*/
+
+function add_elementor_page_view_checkbox() {
+   // Add a new setting to the "General" WordPress settings page
+   add_settings_field(
+       'hide_elementor_notices',
+       'Hide "Edit with Elementor"',
+       'render_elementor_page_view_checkbox',
+       'general'
+   );
+   
+   // Register the new setting
+   register_setting('general', 'hide_elementor_notices');
+}
+
+function render_elementor_page_view_checkbox() {
+   // Retrieve the current value of the setting
+   $hide_notices = get_option('hide_elementor_notices');
+   ?>
+   <input type="checkbox" name="hide_elementor_notices" value="1" <?php checked(1, $hide_notices); ?>> Hides the "Edit with Elementor" name, links, and preceding pipe when viewing all Pages
+   <?php
+}
+
+function hide_elementor_notices_links() {
+   // Check if the "Hide Elementor Notices" setting is checked
+   $hide_notices = get_option('hide_elementor_notices');
+   if ($hide_notices) {
+       // Add JavaScript to hide spans containing "Elementor" and the "Edit with Elementor" span
+       ?>
+       <script>
+           document.addEventListener('DOMContentLoaded', function () {
+               // Hide "Elementor" post state and its preceding em dash
+               const postStateElements = document.querySelectorAll('.post-state');
+               postStateElements.forEach(function (element) {
+                   if (element.textContent.trim() === 'Elementor') {
+                       element.style.display = 'none';
+                       
+                       // Hide the preceding em dash (sibling text node)
+                       const previousSibling = element.previousSibling;
+                       if (previousSibling && previousSibling.nodeType === Node.TEXT_NODE) {
+                           const trimmedText = previousSibling.textContent.trim();
+                           if (trimmedText === '—') {
+                               previousSibling.textContent = ''; // Clear the em dash text
+                           }
+                       }
+                   }
+               });
+
+               // Hide "Edit with Elementor" button and its preceding pipe
+               const editWithElementorElements = document.querySelectorAll('.edit_with_elementor');
+               editWithElementorElements.forEach(function (element) {
+                   element.style.display = 'none';
+                   
+                   // Hide the preceding pipe in the "view" span
+                   const viewSpan = element.previousElementSibling;
+                   if (viewSpan && viewSpan.classList.contains('view')) {
+                       const previousSibling = viewSpan.lastChild;
+                       if (previousSibling && previousSibling.nodeType === Node.TEXT_NODE) {
+                           const trimmedText = previousSibling.textContent.trim();
+                           if (trimmedText === '|') {
+                               previousSibling.textContent = ''; // Clear the pipe text
+                           }
+                       }
+                   }
+               });
+           });
+       </script>
+       <?php
+   }
+}
+
+// Hook the new checkbox to the admin settings
+add_action('admin_init', 'add_elementor_page_view_checkbox');
+
+// Hook to the admin page to apply JavaScript changes
+add_action('admin_head', 'hide_elementor_notices_links');
+
+
+/*  ELEMENTOR QUERIES - USING QUERY ID'S
+________________________________________________________________________*/
+
+// Child Page(s) - use: 'child_pages'
+function child_pages_query_callback( $query ) {
+   global $post;
+   $query->set( 'post_parent', $post->ID );
+}
+add_action( 'elementor/query/child_pages', 'child_pages_query_callback' );
 
 
 /*  REMOVE DASHBOARD META BOXES
@@ -238,17 +650,20 @@ add_filter( 'clean_url', 'site_async_scripts', 11, 1 );
 
 
 // add "#asyncload" to the end of the js file name. I.E. nameoffile-morename.js#asyncload
+
+
 /*  LOAD THEME STYLES AND SCRIPTS
 ________________________________________________________________________*/
 
 function add_theme_enqueues() {
 	wp_enqueue_style( 'style', get_stylesheet_uri() );
+	wp_enqueue_style( 'searchforms-style', get_template_directory_uri() . '/styles/searchforms.css' );
 	wp_deregister_script('jquery');
 	wp_enqueue_script( 'jquery', 'https://ajax.googleapis.com/ajax/libs/jquery/3.6.3/jquery.min.js', array(), '3.6.3', false);
 	wp_enqueue_script( 'viewportHeight', get_template_directory_uri() . '/js/viewportHeight.js#asyncload', array ( 'jquery' ), 1, true);
-   wp_enqueue_script( 'responsiveTables', get_template_directory_uri() . '/js/responsiveTables.js#asyncload', array ( 'jquery' ), 1, true);
-   wp_enqueue_script( 'propertyListings-functions', get_template_directory_uri() . '/js/propertyListings-functions.js#asyncload', array ( 'jquery' ), 1, true);
-   wp_enqueue_script( 'jquery.matchHeight', get_template_directory_uri() . '/js/jquery.matchHeight.js#asyncload', array ( 'jquery' ), 1, false);
+	wp_enqueue_script( 'responsiveTables', get_template_directory_uri() . '/js/responsiveTables.js#asyncload', array ( 'jquery' ), 1, true);
+	wp_enqueue_script( 'propertyListings-functions', get_template_directory_uri() . '/js/propertyListings-functions.js#asyncload', array ( 'jquery' ), 1, true);
+	wp_enqueue_script( 'jquery.matchHeight', get_template_directory_uri() . '/js/jquery.matchHeight.js#asyncload', array ( 'jquery' ), 1, false);
 }
 add_action( 'wp_enqueue_scripts', 'add_theme_enqueues' );
 
@@ -267,7 +682,9 @@ add_filter( 'clean_url', function( $url )
 
 /*  SVG IMAGES
 ________________________________________________________________________*/
-// NOTE: SVG width and height functions are not required since we're using Elementor and its' SVG upload to media library functions.
+
+// NOTE: SVG width and height functions are not required since 
+// we're using Elementor and its' SVG upload to media library functions.
 
 /*  Allows the use of SVGs
 	to be uploaded to the Media Library
@@ -322,12 +739,14 @@ function eg_register_menus() {
 	register_nav_menus(
   		array(
 			'header_nav_menu' => __( 'Header Menu' ),
+			'header_addnav_menu' => __( 'Additional Header Menu' ),
 			'footer_nav_menu' => __( 'Footer Menu' ),
-         'footer_alt_menu' => __( 'Alternate Menu' ),
-         'content_altTwo_menu' => __( 'Alternate Menu - 2' ),
-         'content_altThr_menu' => __( 'Alternate Menu - 3' ),
-         'content_altFou_menu' => __( 'Alternate Menu - 4' ),
-         'content_altFiv_menu' => __( 'Alternate Menu - 5' ),
+			'footer_addnav_menu' => __( 'Additional Footer Menu' ),
+         	'footer_alt_menu' => __( 'Alternate Menu' ),
+         	'content_altTwo_menu' => __( 'Alternate Menu - 2' ),
+         	'content_altThr_menu' => __( 'Alternate Menu - 3' ),
+         	'content_altFou_menu' => __( 'Alternate Menu - 4' ),
+         	'content_altFiv_menu' => __( 'Alternate Menu - 5' ),
     	)
 	);
 }
@@ -365,9 +784,6 @@ function my_widget_title($t)
    return null;
 }
 
-/*  PLUGIN EDITS
-________________________________________________________________________*/
-
 
 /*  Yoast
 __________________________________________*/
@@ -396,28 +812,6 @@ __________________________________________*/
 // instead of having to scroll to message
 add_filter( 'gform_confirmation_anchor', '__return_true' );
 
-// Hides top labels if Placeholders are added - dropdown option
-add_filter( 'gform_enable_field_label_visibility_settings', '__return_true' );
-
-// Blocks non-alphanumeric characters in name fields
-function gf_validate_name( $result, $value, $form, $field ) {
-	if ( $field->type != 'name' ) {
-		return $result;
-	}
-	GFCommon::log_debug( __METHOD__ . '(): Name values => ' . print_r( $value, true ) );
-
-	if ( $result['is_valid'] ) {
-		foreach ( $value as $input ) {
-			if ( ! empty ( $input ) && ! preg_match( '/^[\p{L} ]+$/u', $input ) ) {
-				$result['is_valid'] = false;
-				$result['message'] = '';
-			}
-		}
-	}
-	return $result;
-}
-add_filter( 'gform_field_validation', 'gf_validate_name', 10, 4 );
-
 
 /*  ACF FIELD - FUNCTIONS
 ________________________________________________________________________*/
@@ -438,50 +832,6 @@ function acf_number_comma_decimal($value, $post_id, $field) {
   $value = number_format(floatval($value), 2);
   return $value;
 }
-
-
-/*  HIDE, EDIT WITH ELEMENTOR BUTTON(S)
-________________________________________________________________________*/
-
-function add_elementor_checkbox() {
-   // Add a new setting to the "General" WordPress settings page
-   add_settings_field(
-       'show_edit_with_elementor_button',
-       'Hide "Edit with Elementor"',
-       'render_elementor_checkbox',
-       'general'
-   );
-   
-   // Register the new setting
-   register_setting('general', 'show_edit_with_elementor_button');
-}
-
-function render_elementor_checkbox() {
-   // Retrieve the current value of the setting
-   $show_button = get_option('show_edit_with_elementor_button');
-   ?>
-   <input type="checkbox" name="show_edit_with_elementor_button" value="1" <?php checked(1, $show_button); ?>>
-   <?php
-}
-
-function hide_elementor_button() {
-   // Check if the "Show 'Edit with Elementor' button" setting is checked
-   $show_button = get_option('show_edit_with_elementor_button');
-   if ($show_button) {
-       // Hide the "Edit with Elementor" button on the post/page edit screen
-       ?>
-       <style>
-            #elementor-switch-mode-button, #elementor-editor, #wp-admin-bar-elementor_edit_page {
-                display:none;
-            } 
-      </style>
-      <?php
-   }
-}
-
-add_action('admin_init', 'add_elementor_checkbox');
-add_action('admin_head-post.php', 'hide_elementor_button');
-add_action('admin_head-post-new.php', 'hide_elementor_button');
 
 
 /*  RETS/MLS PLUGIN - ESTATIK
@@ -642,227 +992,6 @@ function convert_phone_number_format($content) {
 }
 add_filter('the_content', 'convert_phone_number_format', 9999);
 
-
-/*  BREADCRUMBS
-________________________________________________________________________*/
-
-function page_breadcrumbs() {
-       
-   // Settings
-   $separator          = '|';
-   $breadcrums_id      = 'breadcrumbs';
-   $breadcrums_class   = 'breadcrumbs';
-   $home_title         = 'Home';
-     
-   // Any custom post types with custom taxonomies, put the taxonomy name below (e.g. product_cat)
-   // $custom_taxonomy    = 'name_posttype';
-   // $custom_taxonomy	= 'another_posttypename';
-      
-   // Get the query & post information
-   global $post,$wp_query;
-      
-   // Do not display on the homepage
-   if ( !is_front_page() ) {
-      
-       // Build the breadcrums
-       echo '<ul id="' . $breadcrums_id . '" class="' . $breadcrums_class . '">';
-          
-       // Home page
-       echo '<li class="item-home"><a class="bread-link bread-home" href="' . get_home_url() . '" title="' . $home_title . '">' . $home_title . '</a></li>';
-       echo '<li class="separator separator-home"> ' . $separator . ' </li>';
-          
-       if ( is_archive() && !is_tax() && !is_category() && !is_tag() ) {
-             
-           echo '<li class="item-current item-archive"><strong class="bread-current bread-archive">' . post_type_archive_title($prefix, false) . '</strong></li>';
-             
-       } else if ( is_archive() && is_tax() && !is_category() && !is_tag() ) {
-             
-           // If post is a custom post type
-           $post_type = get_post_type();
-             
-           // If it is a custom post type display name and link
-           if($post_type != 'post') {
-                 
-               $post_type_object = get_post_type_object($post_type);
-               $post_type_archive = get_post_type_archive_link($post_type);
-             
-               echo '<li class="item-cat item-custom-post-type-' . $post_type . '"><a class="bread-cat bread-custom-post-type-' . $post_type . '" href="' . $post_type_archive . '" title="' . $post_type_object->labels->name . '">' . $post_type_object->labels->name . '</a></li>';
-               echo '<li class="separator"> ' . $separator . ' </li>';
-             
-           }
-             
-           $custom_tax_name = get_queried_object()->name;
-           echo '<li class="item-current item-archive"><strong class="bread-current bread-archive">' . $custom_tax_name . '</strong></li>';
-             
-       } else if ( is_single() ) {
-             
-           // If post is a custom post type
-           $post_type = get_post_type();
-             
-           // If it is a custom post type display name and link
-           if($post_type != 'post') {
-                 
-               $post_type_object = get_post_type_object($post_type);
-               $post_type_archive = get_post_type_archive_link($post_type);
-             
-               echo '<li class="item-cat item-custom-post-type-' . $post_type . '"><a class="bread-cat bread-custom-post-type-' . $post_type . '" href="' . $post_type_archive . '" title="' . $post_type_object->labels->name . '">' . $post_type_object->labels->name . '</a></li>';
-               echo '<li class="separator"> ' . $separator . ' </li>';
-             
-           }
-             
-           // Get post category info
-           $category = get_the_category();
-            
-           if(!empty($category)) {
-             
-               // Get last category post is in
-               $last_category = end(array_values($category));
-                 
-               // Get parent any categories and create array
-               $get_cat_parents = rtrim(get_category_parents($last_category->term_id, true, ','),',');
-               $cat_parents = explode(',',$get_cat_parents);
-                 
-               // Loop through parent categories and store in variable $cat_display
-               $cat_display = '';
-               foreach($cat_parents as $parents) {
-                   $cat_display .= '<li class="item-cat">'.$parents.'</li>';
-                   $cat_display .= '<li class="separator"> ' . $separator . ' </li>';
-               }
-            
-           }
-             
-           // If it's a custom post type within a custom taxonomy
-           $taxonomy_exists = taxonomy_exists($custom_taxonomy);
-           if(empty($last_category) && !empty($custom_taxonomy) && $taxonomy_exists) {
-                  
-               $taxonomy_terms = get_the_terms( $post->ID, $custom_taxonomy );
-               $cat_id         = $taxonomy_terms[0]->term_id;
-               $cat_nicename   = $taxonomy_terms[0]->slug;
-               $cat_link       = get_term_link($taxonomy_terms[0]->term_id, $custom_taxonomy);
-               $cat_name       = $taxonomy_terms[0]->name;
-              
-           }
-             
-           // Check if the post is in a category
-           if(!empty($last_category)) {
-               echo $cat_display;
-               echo '<li class="item-current item-' . $post->ID . '"><strong class="bread-current bread-' . $post->ID . '" title="' . get_the_title() . '">' . get_the_title() . '</strong></li>';
-                 
-           // Else if post is in a custom taxonomy
-           } else if(!empty($cat_id)) {
-                 
-               echo '<li class="item-cat item-cat-' . $cat_id . ' item-cat-' . $cat_nicename . '"><a class="bread-cat bread-cat-' . $cat_id . ' bread-cat-' . $cat_nicename . '" href="' . $cat_link . '" title="' . $cat_name . '">' . $cat_name . '</a></li>';
-               echo '<li class="separator"> ' . $separator . ' </li>';
-               echo '<li class="item-current item-' . $post->ID . '"><strong class="bread-current bread-' . $post->ID . '" title="' . get_the_title() . '">' . get_the_title() . '</strong></li>';
-             
-           } else {
-                 
-               echo '<li class="item-current item-' . $post->ID . '"><strong class="bread-current bread-' . $post->ID . '" title="' . get_the_title() . '">' . get_the_title() . '</strong></li>';
-                 
-           }
-             
-       } else if ( is_category() ) {
-              
-           // Category page
-           echo '<li class="item-current item-cat"><strong class="bread-current bread-cat">' . single_cat_title('', false) . '</strong></li>';
-              
-       } else if ( is_page() ) {
-              
-           // Standard page
-           if( $post->post_parent ){
-                  
-               // If child page, get parents 
-               $anc = get_post_ancestors( $post->ID );
-                  
-               // Get parents in the right order
-               $anc = array_reverse($anc);
-                  
-               // Parent page loop
-               if ( !isset( $parents ) ) $parents = null;
-               foreach ( $anc as $ancestor ) {
-                   $parents .= '<li class="item-parent item-parent-' . $ancestor . '"><a class="bread-parent bread-parent-' . $ancestor . '" href="' . get_permalink($ancestor) . '" title="' . get_the_title($ancestor) . '">' . get_the_title($ancestor) . '</a></li>';
-                   $parents .= '<li class="separator separator-' . $ancestor . '"> ' . $separator . ' </li>';
-               }
-                  
-               // Display parent pages
-               echo $parents;
-                  
-               // Current page
-               echo '<li class="item-current item-' . $post->ID . '"><strong title="' . get_the_title() . '"> ' . get_the_title() . '</strong></li>';
-                  
-           } else {       
-               // Just display current page if not parents
-               echo '<li class="item-current item-' . $post->ID . '"><strong class="bread-current bread-' . $post->ID . '"> ' . get_the_title() . '</strong></li>';
-                  
-           }
-              
-       } else if ( is_tag() ) {     
-           // Tag page
-              
-           // Get tag information
-           $term_id        = get_query_var('tag_id');
-           $taxonomy       = 'post_tag';
-           $args           = 'include=' . $term_id;
-           $terms          = get_terms( $taxonomy, $args );
-           $get_term_id    = $terms[0]->term_id;
-           $get_term_slug  = $terms[0]->slug;
-           $get_term_name  = $terms[0]->name;
-              
-           // Display the tag name
-           echo '<li class="item-current item-tag-' . $get_term_id . ' item-tag-' . $get_term_slug . '"><strong class="bread-current bread-tag-' . $get_term_id . ' bread-tag-' . $get_term_slug . '">' . $get_term_name . '</strong></li>';
-          
-       } elseif ( is_day() ) {         
-           // Day archive
-              
-           // Year link
-           echo '<li class="item-year item-year-' . get_the_time('Y') . '"><a class="bread-year bread-year-' . get_the_time('Y') . '" href="' . get_year_link( get_the_time('Y') ) . '" title="' . get_the_time('Y') . '">' . get_the_time('Y') . ' Archives</a></li>';
-           echo '<li class="separator separator-' . get_the_time('Y') . '"> ' . $separator . ' </li>';
-              
-           // Month link
-           echo '<li class="item-month item-month-' . get_the_time('m') . '"><a class="bread-month bread-month-' . get_the_time('m') . '" href="' . get_month_link( get_the_time('Y'), get_the_time('m') ) . '" title="' . get_the_time('M') . '">' . get_the_time('M') . ' Archives</a></li>';
-           echo '<li class="separator separator-' . get_the_time('m') . '"> ' . $separator . ' </li>';
-              
-           // Day display
-           echo '<li class="item-current item-' . get_the_time('j') . '"><strong class="bread-current bread-' . get_the_time('j') . '"> ' . get_the_time('jS') . ' ' . get_the_time('M') . ' Archives</strong></li>';
-              
-       } else if ( is_month() ) {       
-           // Month Archive
-              
-           // Year link
-           echo '<li class="item-year item-year-' . get_the_time('Y') . '"><a class="bread-year bread-year-' . get_the_time('Y') . '" href="' . get_year_link( get_the_time('Y') ) . '" title="' . get_the_time('Y') . '">' . get_the_time('Y') . ' Archives</a></li>';
-           echo '<li class="separator separator-' . get_the_time('Y') . '"> ' . $separator . ' </li>';
-              
-           // Month display
-           echo '<li class="item-month item-month-' . get_the_time('m') . '"><strong class="bread-month bread-month-' . get_the_time('m') . '" title="' . get_the_time('M') . '">' . get_the_time('M') . ' Archives</strong></li>';
-              
-       } else if ( is_year() ) {     
-           // Display year archive
-           echo '<li class="item-current item-current-' . get_the_time('Y') . '"><strong class="bread-current bread-current-' . get_the_time('Y') . '" title="' . get_the_time('Y') . '">' . get_the_time('Y') . ' Archives</strong></li>';
-              
-       } else if ( is_author() ) {    
-           // Auhor archive  
-           // Get the author information
-           global $author;
-           $userdata = get_userdata( $author );  
-           // Display author name
-           echo '<li class="item-current item-current-' . $userdata->user_nicename . '"><strong class="bread-current bread-current-' . $userdata->user_nicename . '" title="' . $userdata->display_name . '">' . 'Author: ' . $userdata->display_name . '</strong></li>';
-       
-     } else if ( get_query_var('paged') ) {     
-           // Paginated archives
-           echo '<li class="item-current item-current-' . get_query_var('paged') . '"><strong class="bread-current bread-current-' . get_query_var('paged') . '" title="Page ' . get_query_var('paged') . '">'.__('Page') . ' ' . get_query_var('paged') . '</strong></li>';
-       
-     } else if ( is_search() ) { 
-           // Search results page
-           echo '<li class="item-current item-current-' . get_search_query() . '"><strong class="bread-current bread-current-' . get_search_query() . '" title="Search results for: ' . get_search_query() . '">Search results for: ' . get_search_query() . '</strong></li>';
-       
-     } elseif ( is_404() ) {      
-           // 404 page
-           echo '<li>' . 'Error 404' . '</li>';
-       }
-       echo '</ul>';       
-   }     
-}
-add_shortcode('breadcrumbs', 'page_breadcrumbs');
 
 
 /* THIS IS THE END                                                       */
