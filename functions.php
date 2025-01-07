@@ -783,6 +783,8 @@ function my_widget_title($t)
    return null;
 }
 
+/*  PLUGIN EDITS
+________________________________________________________________________*/
 
 /*  Yoast
 __________________________________________*/
@@ -795,6 +797,17 @@ function yoasttobottom() {
   return 'low';
 }
 add_filter( 'wpseo_metabox_prio', 'yoasttobottom');
+
+
+/*  SEO Framework
+__________________________________________*/
+
+add_filter(
+	'the_seo_framework_metabox_priority',
+	function () {
+		return 'low';
+	},
+);
 
 
 /*  Tablepress
