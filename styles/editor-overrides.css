@@ -92,11 +92,10 @@
 /*	Style Overrides for Elementor Items
 --------------------------------------------------------------- */
 
-#elementor-panel.elementor-panel.ui-resizable {
-   width: 500px !important;
-}
-#elementor-navigator {
-   width: 380px !important;
+body {
+   --e-editor-panel-width: 500px !important;
+   --e-editor-navigator-width: 380px !important;
+   --e-editor-navigator-promotion-height: 0px !important;
 }
 
 #elementor-panel-page-editor .e-ai-button,
